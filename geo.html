@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DMRS — Location Fetch</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0e17;
+            color: #e2e8f0;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: #111827;
+            border: 1px solid #1e2d45;
+            border-radius: 8px;
+            padding: 40px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+        }
+        h1 { font-size: 20px; color: #e63946; margin-bottom: 8px; }
+        .subtitle { font-size: 11px; color: #64748b; margin-bottom: 24px; }
+        .status {
+            font-size: 13px;
+            padding: 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .status.loading { background: #162032; color: #4cc9f0; }
+        .status.success { background: #0d2b1a; color: #22c55e; border: 1px solid #22c55e; }
+        .status.error { background: #2a0a0a; color: #e63946; border: 1px solid #e63946; }
+        .status.denied { background: #2a1a0a; color: #f4a261; border: 1px solid #f4a261; }
+        .coords {
+            font-size: 14px;
+            color: #4cc9f0;
+            margin-top: 12px;
+            word-break: break-all;
+        }
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid #1e2d45;
+            border-top: 2px solid #4cc9f0;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 12px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .footer {
+            margin-top: 20px;
+            font-size: 10px;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚨 DMRS</h1>
+        <div class="subtitle">DISASTER MANAGEMENT RELIEF SYSTEM</div>
+        <div id="statusBox" class="status loading">
+            <div class="spinner"></div>
+            <span id="statusText">Requesting location access...</span>
+        </div>
+        <div id="coordsBox" class="coords" style="display:none;"></div>
+        <div class="footer">You may close this window once done.</div>
+    </div>
+
+    <script>
+        const statusBox = document.getElementById('statusBox');
+        const statusText = document.getElementById('statusText');
+        const coordsBox = document.getElementById('coordsBox');
+
+        function setStatus(type, text) {
+            statusBox.className = 'status ' + type;
+            statusText.textContent = text;
+            if (type !== 'loading') {
+                statusBox.querySelector('.spinner')?.remove();
+            }
+        }
+
+        function sendToServer(lat, lon, status, message) {
+            const payload = { lat: lat, lon: lon, status: status, message: message };
+            fetch('http://127.0.0.1:8765/set_location', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).catch(err => console.error('Failed to send location:', err));
+        }
+
+        function onSuccess(position) {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            setStatus('success', '✓ Location captured successfully!');
+            coordsBox.style.display = 'block';
+            coordsBox.textContent = 'Lat: ' + lat.toFixed(6) + '  |  Lon: ' + lon.toFixed(6);
+            sendToServer(lat, lon, 'success', 'Location fetched');
+        }
+
+        function onError(error) {
+            let msg = 'Unable to fetch location';
+            let statusType = 'error';
+            if (error.code === error.PERMISSION_DENIED) {
+                msg = 'Location access denied';
+                statusType = 'denied';
+            } else if (error.code === error.POSITION_UNAVAILABLE) {
+                msg = 'Unable to fetch location';
+            } else if (error.code === error.TIMEOUT) {
+                msg = 'Unable to fetch location (timeout)';
+            }
+            setStatus(statusType, msg);
+            sendToServer(null, null, 'error', msg);
+        }
+
+        if (!navigator.geolocation) {
+            setStatus('error', 'Geolocation is not supported by this browser');
+            sendToServer(null, null, 'error', 'Geolocation not supported');
+        } else {
+            navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+                enableHighAccuracy: true,
+                timeout: 15000,
+                maximumAge: 0
+            });
+        }
+    </script>
+</body>
+</html>
+
